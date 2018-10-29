@@ -1,0 +1,105 @@
+---
+title: "Prediction Assignment Writeup"
+author: "Arkadeep Banerjee"
+date: "25th October 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r,echo=TRUE}
+library(e1071)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(corrplot)
+
+#Read the downloaded data
+
+testing <- read.csv(file="pml-testing.csv",head=TRUE,sep=",")
+training <- read.csv(file="pml-training.csv",head=TRUE,sep=",")
+
+#Data Processing
+#A partition is created using caret on the training dataset.
+
+inTrain <- createDataPartition(training$classe,p=0.7,list=FALSE)
+TrainSet <- training[inTrain, ]
+TestSet  <- training[-inTrain, ]
+dim(TrainSet)
+dim(TestSet)
+
+#Variables with values 0 or close to 0 are removed
+
+n0var <- nearZeroVar(TrainSet)
+TrainSet <- TrainSet[, -n0var]
+TestSet  <- TestSet[, -n0var]
+dim(TrainSet)
+dim(TestSet)
+
+#Variables with value NA are removed
+
+AllNA <- sapply(TrainSet, function(x) mean(is.na(x))) > 0.95
+TrainSet <- TrainSet[, AllNA==FALSE]
+TestSet <- TestSet[, AllNA==FALSE]
+dim(TrainSet)
+dim(TestSet)
+
+# remove identification only variables (columns 1 to 5)
+
+TrainSet <- TrainSet[, -(1:5)]
+TestSet  <- TestSet[, -(1:5)]
+dim(TrainSet)
+dim(TestSet)
+
+#check correlation among variables
+
+
+M <- cor(TrainSet[, -54])
+corrplot(M, method="circle")
+```
+**1.RandomForest method**
+```{r,echo=TRUE}
+# model fit
+set.seed(3408)
+controlRF <- trainControl(method="cv", number=3, verboseIter=FALSE)
+modFitRandForest <- train(classe ~ ., data=TrainSet, method="rf",
+                          trControl=controlRF)
+modFitRandForest$finalModel
+
+# prediction on Test dataset
+predictRandForest <- predict(modFitRandForest, newdata=TestSet)
+confMatRandForest <- confusionMatrix(predictRandForest, TestSet$classe)
+confMatRandForest
+
+# Matrix results are plotted
+plot(confMatRandForest$table, col = confMatRandForest$byClass, 
+     main = paste("Random Forest - Accuracy =",
+                  round(confMatRandForest$overall['Accuracy'], 4)))
+```
+**2.Decision tree**
+```{r,echo=TRUE}
+# model fit
+
+set.seed(3408)
+modFitDecTree <- rpart(classe ~ ., data=TrainSet, method="class")
+fancyRpartPlot(modFitDecTree)
+
+# prediction on Test dataset
+
+predictDecTree <- predict(modFitDecTree, newdata=TestSet, type="class")
+confMatDecTree <- confusionMatrix(predictDecTree, TestSet$classe)
+confMatDecTree
+
+#Matrix results are plotted
+plot(confMatDecTree$table, col = confMatDecTree$byClass, 
+     main = paste("Decision Tree - Accuracy =",
+                  round(confMatDecTree$overall['Accuracy'], 4)))
+```
+**3. Applying the selected Model to the Test Data (Random Forest is selected because of higher accuracy)**
+```{r,echo=TRUE}
+predictTEST <- predict(modFitRandForest, newdata=testing)
+predictTEST
+```
